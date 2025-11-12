@@ -1,0 +1,20 @@
+# Core
+pandas==2.3.3
+numpy==2.1.2
+requests==2.32.3
+loguru==0.7.3
+openpyxl
+
+# Async + parsing
+aiohttp==3.13.2
+aiodns==3.5.0
+beautifulsoup4==4.14.2
+tldextract==5.3.0
+
+# ML (for semantic relevance)
+sentence-transformers
+torch
+
+# Images + hashing
+Pillow==10.4.0
+ImageHash
