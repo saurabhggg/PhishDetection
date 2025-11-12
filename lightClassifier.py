@@ -164,7 +164,7 @@ def main(input_csv, out_csv, min_cse_score=0.45):
         matched_cse, cse_sim = cse_resemblance_features(h)
 
         # weighted combination of lexical suspiciousness + cse resemblance
-        score = 0.6 * lex_score[i] + 0.4 * cse_sim
+        score = 0.4 * lex_score[i] + 0.6 * cse_sim
 
         if score >= 0.75:
             bucket = "high"
