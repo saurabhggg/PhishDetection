@@ -1,0 +1,32 @@
+{
+  "LogisticRegression": {
+    "F1": 0.9657,
+    "Precision": 0.9677,
+    "Recall": 0.9652,
+    "AUC": 0.9869
+  },
+  "RandomForest": {
+    "F1": 0.9704,
+    "Precision": 0.9719,
+    "Recall": 0.9699,
+    "AUC": 0.9887
+  },
+  "XGBoost": {
+    "F1": 0.9665,
+    "Precision": 0.9673,
+    "Recall": 0.9661,
+    "AUC": 0.9881
+  },
+  "LightGBM": {
+    "F1": 0.9635,
+    "Precision": 0.9639,
+    "Recall": 0.9632,
+    "AUC": 0.9881
+  },
+  "GradientBoosting": {
+    "F1": 0.966,
+    "Precision": 0.967,
+    "Recall": 0.9656,
+    "AUC": 0.988
+  }
+}

@@ -1,0 +1,42 @@
+Domain,Status,Relation_Score,Final_URL,HTTP_Status,Title,Content_CSE_Keyword_Count,Content_Phish_Keyword_Count,Semantic_CSE,Semantic_Score,Favicon_Match,Favicon_Distance,RDAP_Org,RDAP_Registrar,Domain_Age_Days
+dwar.co.in,uncertain,0.8,https://dwar.co.in,200.0,,0.0,0.0,BoB,0.484,,,Ayush Aman,801217.0,7.0
+ra9.net.in,unrelated,0.3,https://ra9.net.in,200.0,Ra9,0.0,0.0,SBI,0.142,,,,1636.0,7.0
+greenlotus.co.in,uncertain,0.8,https://greenlotus.co.in,200.0,greenlotus.co.in,0.0,0.0,IRCTC,0.156,,,,801409.0,7.0
+addigit.co.in,unrelated,0.3,https://addigit.co.in,200.0,AdDigit - Digital Signage Content Management,0.0,1.0,IRCTC,0.215,,,,1647.0,7.0
+glowuv.in,uncertain,0.8,https://glowuv.in,200.0,glowuv,0.0,1.0,SBI,0.206,,,glowuv.in,146.0,7.0
+hecs.co.in,unrelated,0.3,https://hecs.co.in,200.0,,0.0,0.0,BoB,0.484,,,,146.0,7.0
+printbob.in,unrelated,0.3,https://printbob.in,200.0,,0.0,0.0,BoB,0.484,,,,146.0,7.0
+hotelindiana.co.in,uncertain,0.8,https://hotelindiana.co.in,200.0,,0.0,0.0,BoB,0.484,,,Star PG,146.0,7.0
+nankha.co.in,uncertain,0.8,https://nankha.co.in,200.0,,0.0,0.0,BoB,0.484,,,NANKHA,146.0,7.0
+glomeq.in,unrelated,0.3,https://glomeq.in,200.0,,0.0,0.0,BoB,0.484,,,,146.0,7.0
+m3t.org.in,uncertain,0.8,https://m3t.org.in,200.0,,0.0,0.0,BoB,0.484,,,ISKCON,146.0,7.0
+theglenhart.co.in,uncertain,0.8,https://theglenhart.co.in,200.0,,0.0,0.0,BoB,0.484,,,HOUZBAY CONSULTING,146.0,7.0
+ajor.co.in,uncertain,0.8,https://ajor.co.in,200.0,,0.0,0.0,BoB,0.484,,,JAGDHARI TRADERS,146.0,7.0
+the-glenhart.co.in,uncertain,0.8,https://the-glenhart.co.in,200.0,,0.0,0.0,BoB,0.484,,,HOUZBAY CONSULTING,146.0,7.0
+w-max.co.in,uncertain,0.8,https://w-max.co.in,200.0,,0.0,0.0,BoB,0.484,,,Wuerth India Private Limited,146.0,7.0
+dhanguard.org.in,unrelated,0.3,https://dhanguard.org.in,200.0,Parked Domain name on Hostinger DNS system,0.0,1.0,HDFC,0.128,,,,1636.0,7.0
+aagame777.co.in,unrelated,0.3,https://aagame777.co.in,200.0,AA Game APK - AA Game,0.0,0.0,IOCL,0.309,,,,1636.0,7.0
+optionchain.co.in,uncertain,0.8,https://optionchain.co.in,200.0,NSE Option Chain — Pro View,0.0,0.0,IOCL,0.159,,,Jeevanashray Foundation,146.0,7.0
+badmintonindia.org.in,unrelated,0.3,https://badmintonindia.org.in,200.0,badmintonindia.org.in -,0.0,0.0,IOCL,0.199,,,,146.0,7.0
+tharang.co.in,unrelated,0.3,https://tharang.co.in,200.0,Tharang,0.0,0.0,IRCTC,0.108,,,,146.0,7.0
+studioardo.co.in,uncertain,0.8,https://studioardo.co.in,200.0,Studio Ardo,0.0,0.0,IOCL,0.23,,,Studio Ardo,146.0,7.0
+kavininfra.co.in,uncertain,0.8,https://kavininfra.co.in,200.0,Domain Default page,0.0,1.0,SBI,0.185,,,KAVIN INFRASTRUCTURE SERVICES PRIVATE LIMITED,801217.0,7.0
+kioselvators.co.in,unrelated,0.3,https://kioselvators.co.in,200.0,Kios Elevators | Home,0.0,1.0,Airtel,0.246,,,,,0.0
+goodx.co.in,unrelated,0.3,https://goodx.co.in,200.0,E - Transport,0.0,0.0,HDFC,0.22,ICICI,26.0,,,0.0
+onlineage.in,uncertain,0.8,https://onlineage.in,200.0,OnlineAge – OnlineAge,1.0,1.0,PNB,0.286,,,,,0.0
+kovyl.in,unrelated,0.3,https://kovyl.in,200.0,Parked Domain name on Hostinger DNS system,0.0,1.0,HDFC,0.128,,,,,0.0
+hop.org.in,unrelated,0.3,https://hop.org.in,200.0,Parked Domain name on Hostinger DNS system,0.0,1.0,HDFC,0.128,,,,,0.0
+megamont.co.in,unrelated,0.3,https://megamont.co.in,200.0,Parked Domain name on Hostinger DNS system,0.0,1.0,HDFC,0.128,,,,,0.0
+lovemeal.co.in,unrelated,0.3,https://lovemeal.co.in,200.0,Parked Domain name on Hostinger DNS system,0.0,1.0,HDFC,0.128,,,,,0.0
+gptandagondia.org.in,unrelated,0.3,https://www.gptandagondia.org.in/,200.0,तांडा ग्रामपंचायत | Tanda Grampanchayat - आधिकारिक वेबसाइट,0.0,0.0,ICICI,0.24,,,,,0.0
+earnonlinepro.xyz,unrelated,0.3,http://earnonlinepro.xyz,200.0,,0.0,0.0,BoB,0.484,,,,,0.0
+airgentech.xyz,unrelated,0.3,http://airgentech.xyz,200.0,,0.0,0.0,BoB,0.484,,,,,0.0
+indiancomet.in,uncertain,0.8,https://indiancomet.in/,200.0,Home - CoMET,0.0,0.0,SBI,0.183,,,VaCCT,1636.0,7.0
+servicescenterindia.co.in,uncertain,1.3,http://servicescenterindia.co.in,200.0,24X7 Customer Care Support,1.0,0.0,Airtel,0.258,,,Aapanjan Enterprise,146.0,7.0
+whickers.com.tr,unrelated,0.3,https://whickers.com.tr/,200.0,WHİCKERS,0.0,0.0,IOCL,0.137,,,,,0.0
+layananresmi.biz.id,unrelated,0.3,http://layananresmi.biz.id,200.0,Layananresmi - Belajar Jadi Gak Ngebosenin!,0.0,0.0,SBI,0.161,,,,1.0,24.0
+designmazic.co.in,uncertain,0.8,http://designmazic.co.in,200.0,Design Mazic,0.0,0.0,Airtel,0.13,,,360Digit,1636.0,7.0
+smksnwdipancor.sch.id,unrelated,0.3,http://smksnwdipancor.sch.id,200.0,SMK NWDI Pancor,0.0,0.0,SBI,0.273,,,,1.0,7.0
+suburbanink.com.br,unrelated,0.3,http://suburbanink.com.br,200.0,Suburban Ink – My WordPress Blog,0.0,0.0,NIC,0.193,,,,,8.0
+redonline.in,uncertain,0.8,https://redonline.in/auth?tab=signup,200.0,RED – The AI Learning Assistant,0.0,0.0,NIC,0.255,,,Red AI Learning Assistant,1636.0,7.0
+symphonicpfunk.com,uncertain,0.8,http://symphonicpfunk.com,200.0,For Sale Page,1.0,0.0,IOCL,0.16,,,,472.0,7.0
