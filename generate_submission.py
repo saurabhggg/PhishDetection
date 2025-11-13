@@ -181,36 +181,48 @@ def find_chrome_binary():
             return p
     return None
 
-def capture_screenshot_chrome(url: str, out_path: str) -> bool:
-    if not USE_SELENIUM:
-        return False
-    chrome_bin = find_chrome_binary()
-    if not chrome_bin:
-        # no chrome found on system
-        return False
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from PIL import Image
+from io import BytesIO
+import time
+import os
+
+def start_browser():
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+
+    opts = Options()
+    opts.add_argument("--headless=new")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
+    opts.add_argument("--disable-gpu")
+    opts.add_argument("--window-size=1366,900")
+
+    service = Service(ChromeDriverManager().install())
+
+    return webdriver.Chrome(service=service, options=opts)
+
+
+def capture_screenshot_png(domain: str, out_path: str) -> str:
     try:
-        opts = Options()
-        opts.binary_location = chrome_bin
-        opts.add_argument("--headless=new")
-        opts.add_argument("--no-sandbox")
-        opts.add_argument("--disable-dev-shm-usage")
-        opts.add_argument("--disable-gpu")
-        opts.add_argument("--window-size=1366,900")
-        # install matching chromedriver automatically
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=opts)
-        driver.set_page_load_timeout(SCREENSHOT_TIMEOUT)
+        driver = start_browser()
+        driver.set_page_load_timeout(10)
+
+        url = domain if domain.startswith("http") else f"http://{domain}"
         driver.get(url)
-        time.sleep(2)
+        time.sleep(1)
+
+        out_path = safe_filename_for_url(url)
         driver.save_screenshot(out_path)
         driver.quit()
-        return True
+        return out_path
     except Exception as e:
-        try:
-            driver.quit()
-        except Exception:
-            pass
-        return False
+        print("Screenshot failed for", domain, "→", e)
+        return ""
+
 
 def safe_filename_for_url(url: str):
     h = hashlib.md5(url.encode("utf-8")).hexdigest()
@@ -417,11 +429,10 @@ def main(args):
 
                 # screenshot for positives if requested and chrome present
                 screenshot_path = ""
-                if label == 1 and args.screenshots and USE_SELENIUM:
-                    url_for_shot = extra.get("final_url") or ("http://" + d)
+                if label == 1 and args.screenshots:
+                    url_for_shot = extra.get("final_url") or d
                     path = safe_filename_for_url(url_for_shot)
-                    ok = capture_screenshot_chrome(url_for_shot, path)
-                    screenshot_path = path if ok else ""
+                    screenshot_path = capture_screenshot_png(url_for_shot, path)
                 extra["screenshot"] = screenshot_path
 
             out_row = {
@@ -480,7 +491,7 @@ if __name__ == "__main__":
     p.add_argument("--input", default=DEFAULT_INPUT, help="Input CSV (heavy classifier output)")
     p.add_argument("--model_dir", default=DEFAULT_MODEL_DIR, help="Dir with trained model & scaler")
     p.add_argument("--threshold", type=float, default=0.5, help="Probability threshold for phishing")
-    p.add_argument("--screenshots", action="store_true", help="Capture screenshot for positives (requires google-chrome)")
+    p.add_argument("--screenshots", default=True, action="store_true", help="Capture screenshot for positives (requires google-chrome)")
     p.add_argument("--checkpoint", type=int, default=200, help="Checkpoint every N domains")
     p.add_argument("--max_workers", type=int, default=8, help="Parallel workers for feature extraction")
     p.add_argument("--application_id", default="AIGR-000000", help="Application ID for submission XLSX")
