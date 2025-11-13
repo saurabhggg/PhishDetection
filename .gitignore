@@ -2,3 +2,5 @@ prefilter_scored.csv
 prefilter_scored.csv
 venv/
 google-chrome-stable_current_amd64.deb
+*.deb
+chrome_part_*
