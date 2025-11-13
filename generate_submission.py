@@ -3,172 +3,202 @@
 """
 generate_submission.py
 ----------------------
-Reads prefilter_for_heavy.csv (Domain, CSE_Match), extracts features using
-user feature_extractor (or fallback lexical), applies trained phishing model,
-collects evidence (RDAP, hosting IPs, favicon, screenshots), and generates
-submission CSV + Excel per problem statement.
+Improved, robust submission generator for phishing detection.
+
+✅ Reads: CSE_Relevance_Output_v2.csv or similar (must have Domain + CSE columns)
+✅ Uses: trained model from /outputs
+✅ Extracts: features using feature_extractor.py (if available)
+✅ Predicts: phishing probability
+✅ Collects: RDAP, IP, title, favicon, screenshot (only for phishing)
+✅ Auto-handles: Chrome + ChromeDriver (downloads if missing)
+✅ Compatible with Linux, macOS, Windows
 
 Usage:
-  python generate_submission.py --input prefilter_for_heavy.csv \
-      --model_dir outputs --out submission_results.csv \
-      --application_id AIGR-000001 --screenshots
+  python generate_submission.py --input CSE_Relevance_Output.csv \
+      --model_dir outputs --application_id AIGR-000001 --screenshots
 """
 
-import os, sys, json, time, socket, hashlib, argparse, joblib, requests
+import os, sys, re, io, time, json, math, socket, hashlib, argparse, joblib, requests
 import pandas as pd, numpy as np
 from pathlib import Path
 from urllib.parse import urljoin
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import Counter
 
-# Try selenium (optional)
-USE_SELENIUM = False
+# Optional imports
+USE_EXTERNAL_FE, fe_mod = False, None
 try:
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    USE_SELENIUM = True
-except Exception:
-    USE_SELENIUM = False
-
-# Try user feature extractor
-USE_EXTERNAL_FE = False
-fe_mod = None
-try:
-    import model.feature_extractor as fe_mod_try
-    fe_mod = fe_mod_try
+    import feature_extractor as fe_mod
     if hasattr(fe_mod, "extract_features"):
         USE_EXTERNAL_FE = True
 except Exception:
     USE_EXTERNAL_FE = False
 
-# ---------------- Config ----------------
-DEFAULT_INPUT = "prefilter_for_heavy.csv"
+# Paths and defaults
 DEFAULT_MODEL_DIR = "outputs"
 DEFAULT_SCALER = "scaler.pkl"
-OUTPUT_CSV = "submission_results.csv"
-OUTPUT_XLSX_TEMPLATE = "PS-02_{app}_Submission_Set.xlsx"
 CACHE_FILE = "submission_cache.json"
 SCREENSHOT_DIR = "evidences"
+OUTPUT_CSV = "submission_results.csv"
+OUTPUT_XLSX_TEMPLATE = "PS-02_{app}_Submission_Set.xlsx"
 SCREENSHOT_TIMEOUT = 12
 
 Path(SCREENSHOT_DIR).mkdir(parents=True, exist_ok=True)
 
-# ---------------- Helpers ----------------
-import re, math
-from collections import Counter
+# ---------------------------------------------------------------------
+# Screenshot utilities
+# ---------------------------------------------------------------------
+def safe_filename_for_url(url: str):
+    h = hashlib.md5(url.encode("utf-8")).hexdigest()
+    return os.path.join(SCREENSHOT_DIR, f"{h}.png")
 
-def shannon_entropy(s: str) -> float:
-    if not s: return 0.0
-    prob = [freq / len(s) for freq in Counter(s).values()]
-    return -sum(p * math.log2(p) for p in prob)
-
-def fallback_extract_features(url: str) -> dict:
-    """Fallback lexical-only extractor"""
-    u = str(url).strip()
-    if not u: return {}
-    if not re.match(r"^https?://", u, flags=re.I):
-        u = "http://" + u
-    from urllib.parse import urlparse
-    parsed = urlparse(u)
-    host = parsed.netloc.lower()
-    path = parsed.path or ""
-    parts = host.split(".")
-    domain = parts[-2] + "." + parts[-1] if len(parts) >= 2 else host
-    subdomain = ".".join(parts[:-2]) if len(parts) > 2 else ""
-    feats = {
-        "url_length": len(u),
-        "num_dots": u.count("."),
-        "num_hyphens": u.count("-"),
-        "num_slashes": u.count("/"),
-        "num_digits": sum(c.isdigit() for c in u),
-        "digit_ratio": sum(c.isdigit() for c in u)/(len(u)+1e-5),
-        "entropy_url": shannon_entropy(u),
-        "entropy_domain": shannon_entropy(domain),
-        "subdomain_count": len(subdomain.split(".")) if subdomain else 0,
-        "domain_length": len(domain),
-        "https": 1 if parsed.scheme.lower() == "https" else 0,
-    }
-    return feats
-
-def safe_encode_feature(val):
-    if val is None: return 0.0
-    try: return float(val)
-    except Exception:
-        s = str(val).strip()
-        if s == "" or s.lower() in ("nan", "none", "null"): return 0.0
-        try: return float(s)
-        except Exception: return float(abs(hash(s)) % 1000) / 1000.0
-
-def load_best_model(model_dir):
-    mdl_dir = Path(model_dir)
-    if not mdl_dir.exists():
-        raise FileNotFoundError(f"Model directory not found: {model_dir}")
-    candidates = sorted([p for p in mdl_dir.iterdir() if p.name.endswith("_balanced.pkl")])
-    if not candidates:
-        candidates = sorted([p for p in mdl_dir.iterdir() if p.suffix == ".pkl"])
-    if not candidates:
-        raise FileNotFoundError("No model found in outputs/")
-    model_path = candidates[-1]
-    print("✅ Loading model:", model_path)
-    model = joblib.load(str(model_path))
-    scaler_path = mdl_dir / DEFAULT_SCALER
-    scaler = joblib.load(str(scaler_path)) if scaler_path.exists() else None
-    return model, scaler, model_path.name
-
-def safe_filename_for_url(url):
-    return os.path.join(SCREENSHOT_DIR, hashlib.md5(url.encode()).hexdigest() + ".png")
-
-def capture_screenshot(url, out_path):
-    if not USE_SELENIUM: return False
+def capture_screenshot_auto(url: str, out_path: str) -> str:
+    """Automatically manage Chrome + Driver, download if missing."""
     try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+        from webdriver_manager.chrome import ChromeDriverManager
+        from webdriver_manager.core.utils import ChromeType
+
         opts = Options()
         opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--window-size=1366,900")
-        driver = webdriver.Chrome(options=opts)
+
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager(chrome_type=ChromeType.GOOGLE).install()),
+            options=opts,
+        )
         driver.set_page_load_timeout(SCREENSHOT_TIMEOUT)
         driver.get(url)
         time.sleep(2)
         driver.save_screenshot(out_path)
         driver.quit()
-        return True
-    except Exception:
-        try: driver.quit()
-        except Exception: pass
-        return False
+        return out_path
 
-def rdap_info(domain):
+    except Exception as e:
+        print(f"⚠️ Screenshot failed for {url}: {e}")
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        return ""
+
+def take_screenshot_if_needed(domain: str, label: int, final_url: str = "") -> str:
+    if label != 1:
+        return ""
+    url_try = final_url or (f"http://{domain}")
+    out_path = safe_filename_for_url(url_try)
+    result = capture_screenshot_auto(url_try, out_path)
+    return result if result else "Screenshot unavailable"
+
+# ---------------------------------------------------------------------
+# Helper utilities
+# ---------------------------------------------------------------------
+def shannon_entropy(s: str) -> float:
+    if not s:
+        return 0.0
+    prob = [freq / len(s) for freq in Counter(s).values()]
+    return -sum(p * math.log2(p) for p in prob)
+
+def fallback_extract_features(url: str) -> dict:
+    """Lightweight lexical fallback extractor."""
+    u = str(url).strip()
+    if not u:
+        return {}
+    if not re.match(r"^https?://", u, flags=re.I):
+        u_for_parse = "http://" + u
+    else:
+        u_for_parse = u
+    from urllib.parse import urlparse
+    parsed = urlparse(u_for_parse)
+    host = parsed.netloc.lower()
+    path = parsed.path or ""
+    parts = host.split(".")
+    domain = parts[-2] + "." + parts[-1] if len(parts) >= 2 else host
+    subdomain = ".".join(parts[:-2]) if len(parts) > 2 else ""
+    feats = {}
+    feats["url_length"] = len(u)
+    feats["num_dots"] = u.count(".")
+    feats["num_hyphens"] = u.count("-")
+    feats["num_digits"] = sum(c.isdigit() for c in u)
+    feats["digit_ratio"] = feats["num_digits"] / (len(u) + 1e-5)
+    feats["entropy_url"] = shannon_entropy(u)
+    feats["entropy_domain"] = shannon_entropy(domain)
+    feats["subdomain_count"] = len(subdomain.split(".")) if subdomain else 0
+    feats["has_ip_host"] = 1 if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", parsed.hostname or "") else 0
+    feats["https"] = 1 if parsed.scheme.lower() == "https" else 0
+    return feats
+
+def rdap_info(domain: str) -> dict:
     out = {"domain_creation_date": "", "rdap_registrar": "", "rdap_org": ""}
     try:
         r = requests.get(f"https://rdap.org/domain/{domain}", timeout=8)
-        if r.status_code != 200: return out
+        if r.status_code != 200:
+            return out
         data = r.json()
         for e in data.get("events", []):
-            if e.get("eventAction") in ("registration","registered"):
+            if e.get("eventAction") in ("registration", "registered"):
                 out["domain_creation_date"] = e.get("eventDate")
         for ent in data.get("entities", []):
             roles = ent.get("roles", [])
-            if "registrar" in roles and not out["rdap_registrar"]:
-                out["rdap_registrar"] = ent.get("handle","")
-            if any(r in roles for r in ("registrant","technical","administrative")) and not out["rdap_org"]:
+            if "registrar" in roles:
+                out["rdap_registrar"] = ent.get("handle", "")
+            if any(rn in roles for rn in ("registrant","administrative","technical")):
                 vca = ent.get("vcardArray", [])
                 if isinstance(vca, list) and len(vca) == 2:
                     for row in vca[1]:
-                        if row[0] == "org": out["rdap_org"] = row[3]
+                        if row[0] == "org":
+                            out["rdap_org"] = row[3]
+                            break
     except Exception:
         pass
     return out
 
-def hosting_info(domain):
+def hosting_info(domain: str) -> dict:
     out = {"ips": ""}
     try:
-        out["ips"] = ",".join(socket.gethostbyname_ex(domain)[2])
-    except Exception: out["ips"] = ""
+        names = socket.gethostbyname_ex(domain)
+        out["ips"] = ",".join(names[2])
+    except Exception:
+        out["ips"] = ""
     return out
 
-# ---------------- Core ----------------
+def safe_encode_feature(val):
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float, np.integer, np.floating)):
+        return float(val)
+    if isinstance(val, (bool, np.bool_)):
+        return float(int(val))
+    s = str(val).strip()
+    if s == "" or s.lower() in ("nan", "none", "null"):
+        return 0.0
+    try:
+        return float(s)
+    except Exception:
+        return float(abs(hash(s)) % 1000) / 1000.0
+
+def load_best_model(model_dir: str):
+    mdl_dir = Path(model_dir)
+    candidates = sorted([p for p in mdl_dir.iterdir() if p.name.endswith("_balanced.pkl")])
+    if not candidates:
+        candidates = sorted([p for p in mdl_dir.iterdir() if p.suffix == ".pkl"])
+    model_path = candidates[-1]
+    print("Loading model:", model_path)
+    model = joblib.load(str(model_path))
+    scaler_path = mdl_dir / DEFAULT_SCALER
+    scaler = joblib.load(str(scaler_path)) if scaler_path.exists() else None
+    return model, scaler, model_path.name
+
+# ---------------------------------------------------------------------
+# Core logic
+# ---------------------------------------------------------------------
 def process_domain(domain, model_feature_names, use_external_fe):
+    feats = {}
     if use_external_fe and fe_mod:
         try:
             feats = fe_mod.extract_features(domain) or {}
@@ -176,109 +206,88 @@ def process_domain(domain, model_feature_names, use_external_fe):
             feats = fallback_extract_features(domain)
     else:
         feats = fallback_extract_features(domain)
-    fv = [safe_encode_feature(feats.get(f, 0)) for f in model_feature_names]
+
+    fv = []
+    for fname in model_feature_names:
+        val = feats.get(fname, feats.get(fname.lower(), feats.get(fname.replace("-", "_"), 0)))
+        fv.append(safe_encode_feature(val))
     return np.array(fv).reshape(1, -1), feats
 
 def main(args):
-    # Read input
     df = pd.read_csv(args.input)
-    if "Domain" not in df.columns or "CSE_Match" not in df.columns:
-        raise ValueError("Input must have columns 'Domain' and 'CSE_Match'")
-    df = df[df["CSE_Match"].notna() & (df["CSE_Match"].astype(str).str.strip() != "")]
-    domains = df["Domain"].dropna().astype(str).str.strip().str.lower().unique().tolist()
-    print(f"Loaded {len(domains)} domains with valid CSE_Match.")
+    cse_col = [c for c in df.columns if "cse" in c.lower()]
+    if not cse_col:
+        raise ValueError("No CSE column found in input file!")
+    cse_col = cse_col[0]
+    df = df[df[cse_col].notna()].copy()
+    df["Domain"] = df["Domain"].astype(str)
+    domains = df["Domain"].str.strip().str.lower().unique().tolist()
+    print(f"Loaded {len(domains)} domains with CSE matches.")
 
-    # Load model
     model, scaler, model_name = load_best_model(args.model_dir)
-    if hasattr(model, "feature_names_in_"):
-        model_feature_names = list(model.feature_names_in_)
-    else:
-        model_feature_names = sorted(fallback_extract_features(domains[0]).keys())
+    model_feature_names = getattr(model, "feature_names_in_", sorted(list(fallback_extract_features(domains[0]).keys())))
 
-    results = []
+    cache = {}
+    if os.path.exists(CACHE_FILE):
+        try:
+            cache = json.load(open(CACHE_FILE))
+        except Exception:
+            cache = {}
+
+    results = {}
     with ThreadPoolExecutor(max_workers=args.max_workers) as ex:
         futures = {ex.submit(process_domain, d, model_feature_names, USE_EXTERNAL_FE): d for d in domains}
         for fut in as_completed(futures):
             d = futures[fut]
             try:
-                X, feats = fut.result()
-                if scaler is not None:
-                    X = scaler.transform(X)
-                prob = model.predict_proba(X)[:, 1][0] if hasattr(model, "predict_proba") else model.predict(X)[0]
+                Xraw, feats_raw = fut.result()
+                Xs = scaler.transform(Xraw) if scaler is not None else Xraw
+                prob = float(model.predict_proba(Xs)[:, 1][0]) if hasattr(model, "predict_proba") else float(model.predict(Xs)[0])
                 label = int(prob >= args.threshold)
             except Exception as e:
-                print(f"⚠️ Prediction failed for {d}: {e}")
+                print(f"⚠️ Failed {d}: {e}")
                 continue
 
-            row = {
-                "Domain": d,
-                "Predicted_Label": label,
-                "Phishing_Score": round(float(prob), 5),
-                "Model": model_name,
-                "Extracted_Features": json.dumps(feats),
-            }
+            extra = {}
+            if label == 1:
+                rd = rdap_info(d)
+                extra.update(rd)
+                extra.update(hosting_info(d))
+                extra["screenshot"] = take_screenshot_if_needed(d, label)
+            out_row = {"Domain": d, "Predicted_Label": label, "Phishing_Score": prob, "Model": model_name}
+            out_row.update(extra)
+            results[d] = out_row
+            cache[d] = out_row
+            if len(results) % args.checkpoint == 0:
+                pd.DataFrame(list(results.values())).to_csv(OUTPUT_CSV, index=False)
 
-            if label == 1:  # phishing
-                row.update(rdap_info(d))
-                row.update(hosting_info(d))
-                try:
-                    url_try = d if d.startswith("http") else f"http://{d}"
-                    r = requests.get(url_try, timeout=8, headers={"User-Agent": args.user_agent})
-                    row["http_status"] = r.status_code
-                    from bs4 import BeautifulSoup
-                    soup = BeautifulSoup(r.text, "html.parser")
-                    row["page_title"] = soup.title.string if soup.title else ""
-                    row["final_url"] = r.url
-                    fav_url = urljoin(r.url, "/favicon.ico")
-                    row["favicon_url"] = fav_url
-                except Exception:
-                    row.update({"http_status": "", "page_title": "", "final_url": "", "favicon_url": ""})
-
-                screenshot_path = ""
-                if args.screenshots and USE_SELENIUM:
-                    screenshot_path = safe_filename_for_url(d)
-                    capture_screenshot(f"http://{d}", screenshot_path)
-                row["screenshot"] = screenshot_path
-
-            results.append(row)
-
-    df_out = pd.DataFrame(results)
-    df_out.to_csv(args.out, index=False)
-    print(f"✅ Saved results -> {args.out}")
-
-    # Create submission Excel
-    submission = []
-    for r in df_out.to_dict(orient="records"):
-        submission.append({
+    pd.DataFrame(list(results.values())).to_csv(OUTPUT_CSV, index=False)
+    sub_rows = []
+    for r in results.values():
+        sub_rows.append({
             "Application_ID": args.application_id,
             "Source_of_detection": args.input,
             "Identified_Domain": r["Domain"],
-            "Corresponding_CSE_Domain": df[df["Domain"] == r["Domain"]]["CSE_Match"].values[0] if r["Domain"] in df["Domain"].values else "",
-            "Critical_Sector_Entity_Name": "",
-            "Phishing_Suspected": "Phishing" if r["Predicted_Label"] == 1 else "Benign",
-            "Domain_Registration_Date": r.get("domain_creation_date", ""),
-            "Registrar_Name": r.get("rdap_registrar", ""),
-            "Registrant_Org": r.get("rdap_org", ""),
+            "Phishing_Suspected": "Phishing" if r["Predicted_Label"] else "Benign",
             "Hosting_IP": r.get("ips", ""),
             "Evidence_File": r.get("screenshot", ""),
             "Date_of_detection": datetime.now().strftime("%d-%m-%Y"),
             "Time_of_detection": datetime.now().strftime("%H-%M-%S"),
-            "Remarks": ""
         })
     out_xlsx = OUTPUT_XLSX_TEMPLATE.format(app=args.application_id)
-    pd.DataFrame(submission).to_excel(out_xlsx, index=False)
-    print(f"✅ Submission Excel -> {out_xlsx}")
+    pd.DataFrame(sub_rows).to_excel(out_xlsx, index=False)
+    print(f"✅ Done. Results -> {OUTPUT_CSV} and Excel -> {out_xlsx}")
 
-# ---------------- CLI ----------------
+# ---------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate phishing detection submission & evidence")
-    parser.add_argument("--input", default=DEFAULT_INPUT, help="Input CSV (Domain, CSE_Match)")
-    parser.add_argument("--model_dir", default=DEFAULT_MODEL_DIR, help="Directory with trained models")
-    parser.add_argument("--out", default=OUTPUT_CSV, help="Output results CSV")
-    parser.add_argument("--threshold", type=float, default=0.5, help="Phishing score threshold")
-    parser.add_argument("--max_workers", type=int, default=8, help="Parallel threads")
-    parser.add_argument("--application_id", default="AIGR-000000", help="Application ID for submission Excel")
-    parser.add_argument("--screenshots", action="store_true", help="Take screenshots for phishing (requires Selenium)")
-    parser.add_argument("--user_agent", default="Mozilla/5.0", help="User-Agent header for requests")
+    parser = argparse.ArgumentParser(description="Generate submission predictions and evidence")
+    parser.add_argument("--input", required=True, help="Input CSV with Domain and CSE column")
+    parser.add_argument("--model_dir", default=DEFAULT_MODEL_DIR)
+    parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--max_workers", type=int, default=8)
+    parser.add_argument("--application_id", default="AIGR-000000")
+    parser.add_argument("--checkpoint", type=int, default=200)
     args = parser.parse_args()
     main(args)
