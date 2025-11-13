@@ -54,38 +54,57 @@ def safe_filename_for_url(url: str):
     return os.path.join(SCREENSHOT_DIR, f"{h}.png")
 
 def capture_screenshot_auto(url: str, out_path: str) -> str:
-    """Automatically manage Chrome + Driver, download if missing."""
+    """Fully robust Chrome screenshot handler."""
     try:
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
         from selenium.webdriver.chrome.service import Service
         from webdriver_manager.chrome import ChromeDriverManager
-        from webdriver_manager.core.utils import ChromeType
+        import shutil
+        import subprocess
+
+        # Detect Chrome or Chromium
+        chrome_path = None
+        for cmd in ["google-chrome", "chrome", "chromium-browser", "chromium"]:
+            if shutil.which(cmd):
+                chrome_path = shutil.which(cmd)
+                break
+
+        if not chrome_path:
+            print("❌ No Chrome/Chromium found on system. Screenshot disabled.")
+            return ""
 
         opts = Options()
+        opts.binary_location = chrome_path
+
+        # Essential flags for Linux VM
         opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument("--disable-software-rasterizer")
+        opts.add_argument("--disable-extensions")
+        opts.add_argument("--ignore-certificate-errors")
         opts.add_argument("--window-size=1366,900")
 
         driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager(chrome_type=ChromeType.GOOGLE).install()),
-            options=opts,
+            service=Service(ChromeDriverManager().install()),
+            options=opts
         )
-        driver.set_page_load_timeout(SCREENSHOT_TIMEOUT)
+
+        driver.set_page_load_timeout(12)
         driver.get(url)
         time.sleep(2)
         driver.save_screenshot(out_path)
         driver.quit()
+
+        print(f"📸 Screenshot saved: {out_path}")
         return out_path
 
     except Exception as e:
-        print(f"⚠️ Screenshot failed for {url}: {e}")
-        try:
-            driver.quit()
-        except Exception:
-            pass
+        print(f"❌ Screenshot failed for {url} → {e}")
         return ""
+
 
 def take_screenshot_if_needed(domain: str, label: int, final_url: str = "") -> str:
     if label != 1:
