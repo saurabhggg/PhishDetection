@@ -341,51 +341,33 @@ def main(args):
                 print("Feature extraction failed for", d, "->", e)
                 continue
 
-            # ensure shape matches scaler/model
-            X = Xraw
+            try:
+                X_df = pd.DataFrame(Xraw, columns=model_feature_names)
+            except Exception:
+                # fallback if mismatch
+                X_df = pd.DataFrame(Xraw, columns=model_feature_names[:Xraw.shape[1]])
+
+            # 2) Apply scaler (also expects feature names!)
             if scaler is not None:
                 try:
-                    Xs = scaler.transform(X)
-                except Exception as e:
-                    # pad/truncate to scaler mean_ length if available
-                    if hasattr(scaler, "mean_"):
-                        n = len(scaler.mean_)
-                        xpad = np.zeros((1, n), dtype=float)
-                        k = min(n, X.shape[1])
-                        xpad[0, :k] = X[0, :k]
-                        try:
-                            Xs = scaler.transform(xpad)
-                        except Exception:
-                            Xs = xpad
-                    else:
-                        # try to pad to model_feature_names length
-                        n = len(model_feature_names)
-                        xpad = np.zeros((1, n), dtype=float)
-                        k = min(n, X.shape[1])
-                        xpad[0, :k] = X[0, :k]
-                        Xs = xpad
+                    X_scaled = scaler.transform(X_df)
+                except Exception:
+                    # Force-align scaler input
+                    X_scaled = scaler.transform(X_df.values)
             else:
-                # if no scaler, still ensure feature-count matches model expectation for xgboost/sklearn
-                n_expected = len(model_feature_names)
-                if X.shape[1] != n_expected:
-                    xpad = np.zeros((1, n_expected), dtype=float)
-                    k = min(n_expected, X.shape[1])
-                    xpad[0, :k] = X[0, :k]
-                    Xs = xpad
-                else:
-                    Xs = X
+                X_scaled = X_df.values
 
-            # predict probability
+            # 3) Model expects named features again → wrap back into DataFrame
             try:
-                if hasattr(model, "predict_proba"):
-                    probs = model.predict_proba(Xs)[:, 1]
-                    prob = float(probs[0])
-                else:
-                    pred = model.predict(Xs)[0]
-                    prob = float(pred)
-            except Exception as e:
-                print("Model predict failed for", d, "->", e)
-                prob = 0.0
+                X_final = pd.DataFrame(X_scaled, columns=model_feature_names)
+            except Exception:
+                X_final = pd.DataFrame(X_scaled, columns=model_feature_names[:X_scaled.shape[1]])
+
+            # 4) Predict probability
+            if hasattr(model, "predict_proba"):
+                prob = float(model.predict_proba(X_final)[0][1])
+            else:
+                prob = float(model.predict(X_final)[0])
 
             label = int(prob >= args.threshold)
 
