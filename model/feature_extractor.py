@@ -23,16 +23,37 @@ from bs4 import BeautifulSoup
 from tldextract import extract as tld_extract
 from PIL import Image
 import imagehash
+from sentence_transformers import SentenceTransformer
 
 # ------------------------------
 # CONFIG
 # ------------------------------
-CACHE_FILE = "feature_cache.json"
+CACHE_FILE = "feature_cache_new.json"
 
 CSE_KEYWORDS = [
     "sbi","sbicard","sbilife","hdfc","hdfclife","hdfcergo","icici","icicibank",
     "icicidirect","pnb","bankofbaroda","nic","gov","irctc","airtel","iocl","indianoil"
 ]
+
+model_st = SentenceTransformer("paraphrase-MiniLM-L6-v2")
+
+CSE_EMBS = model_st.encode(CSE_KEYWORDS, show_progress_bar=False, convert_to_numpy=True)
+
+def semantic_similarity_to_cse(domain: str):
+    # Clean domain → text
+    clean = domain.replace("-", " ").replace(".", " ")
+    
+    # create sentence embedding
+    emb = model_st.encode(clean, convert_to_numpy=True)
+
+    # cosine similarity with all CSE entity embeddings
+    sims = np.dot(CSE_EMBS, emb) / (
+        np.linalg.norm(CSE_EMBS, axis=1) * np.linalg.norm(emb) + 1e-8
+    )
+
+    # return the BEST similarity score
+    return float(max(sims))
+
 
 CSE_FAVICONS = {
     "SBI": ["https://sbi.co.in/favicon.ico"],
@@ -214,7 +235,7 @@ def extract_features(url: str) -> dict:
         "entropy_domain": shannon_entropy(domain),
         "https": int(parsed.scheme.lower() == "https"),
         "has_ip_host": int(has_ip_address(host)),
-        "is_related_to_cse": int(any(kw in safe_u.lower() for kw in CSE_KEYWORDS))
+        "is_related_to_cse": semantic_similarity_to_cse(safe_u)
     })
 
     html = fetch_page_html(safe_u)
@@ -271,7 +292,7 @@ def build_dataset(whitelist_xlsx, phishing_dir, output_csv):
     rows = []
 
     # --- Load BOTH whitelisted files ---
-    whitelist_files = [whitelist_xlsx, "data/whitelisted_new.xlsx"]
+    whitelist_files = [whitelist_xlsx, "train_data/whitelisted_new.xlsx"]
     whitelist_dfs = []
     wl_total_count = 0
 
@@ -367,6 +388,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Extended Feature Extractor with Cache")
     ap.add_argument("--whitelist", required=True, help="Path to whitelisted.xlsx")
     ap.add_argument("--phishing_dir", required=True, help="Directory containing phishing .xlsx files")
-    ap.add_argument("--output", default="features_extended.csv", help="Output CSV file path")
+    ap.add_argument("--output", default="features_extended_new.csv", help="Output CSV file path")
     args = ap.parse_args()
     build_dataset(args.whitelist, args.phishing_dir, args.output)
