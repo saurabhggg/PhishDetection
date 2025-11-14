@@ -32,8 +32,8 @@ from collections import Counter
 # -----------------------------
 # Configuration
 # -----------------------------
-DATA_PATH = "features_extended.csv"  # file created by feature_extractor
-os.makedirs("outputs_new", exist_ok=True)
+DATA_PATH = "features_extended_new.csv"  # file created by feature_extractor
+os.makedirs("outputs_new_v2", exist_ok=True)
 RANDOM_STATE = 42
 
 # -----------------------------
@@ -64,7 +64,7 @@ print(f"📊 Class distribution: {dict(Counter(y))}")
 
 # Save feature columns for inference consistency
 feature_columns = list(X.columns)
-json.dump(feature_columns, open("outputs_new/feature_columns.json", "w"), indent=2)
+json.dump(feature_columns, open("outputs_new_v2/feature_columns.json", "w"), indent=2)
 
 # -----------------------------
 # Train-Test Split
@@ -171,19 +171,19 @@ if best_model is None:
     raise RuntimeError("❌ No model trained successfully.")
 
 best_name, best_clf = best_model
-joblib.dump(best_clf, f"outputs_new/{best_name}_balanced.pkl")
-joblib.dump(scaler, "outputs_new/scaler.pkl")
+joblib.dump(best_clf, f"outputs_new_v2/{best_name}_balanced.pkl")
+joblib.dump(scaler, "outputs_new_v2/scaler.pkl")
 
-with open("outputs_new/model_report.json", "w") as f:
+with open("outputs_new_v2/model_report.json", "w") as f:
     json.dump(report, f, indent=2)
 
 if feature_importances:
-    with open("outputs_new/feature_importance.json", "w") as f:
+    with open("outputs_new_v2/feature_importance.json", "w") as f:
         json.dump(feature_importances, f, indent=2)
 
 print(f"\n🏆 Best Model: {best_name}")
 print(f"📈 Best F1 = {best_score:.4f}")
-print("📁 All models and reports saved in /outputs_new/")
+print("📁 All models and reports saved in /outputs_new_v2/")
 
 # -----------------------------
 # Diagnostics
